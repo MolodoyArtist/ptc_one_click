@@ -1,0 +1,201 @@
+wgd_loss = 180;
+wgd_eff_ind = 2.54;
+wgd_group_ind = 4.11;
+wgd_length = 6e-5;
+wgd_cross_trans = 0.9995;
+wgd_cross_refl = 0.0005;
+wgd_cross_crosstalk = 1e-4;
+coupler_ins_loss = 0.05;
+pin_response = 1.06;
+pin_dark_curr = 5e-6;
+filter_cutoff = num2str(fltr_cutoff);       # var
+filter_ins_loss = 0.1;
+ti_ampl_transimped = 5e2;                   # var
+ti_ampl_cutoff = num2str(amplf_cutoff);     # var
+ti_ampl_order = 4;
+ti_ampl_noise = 0.5e-6;
+laser_power = 0.01;
+laser_linewidth = 150e3;
+laser_sparsing = 0.1;                       # var
+vect_modul_bit = 8;
+vect_modul_prec = 2^vect_modul_bit;
+matrix_modul_bit = 5;
+matrix_modul_prec = 2^matrix_modul_bit;
+
+
+for (i=1:Dim_x){
+    is = num2str(i);
+
+    addelement("Piecewise Linear Import");
+    set("name", "FROM_PWL_" + is);
+    set("x position", 200);
+    set("y position", 600 + 200*i);
+    set("filename", "sources_folder/source" + is + ".txt");
+    
+} 
+
+for (i=1:Dim_y){
+    is = num2str(i);
+
+    addelement("Piecewise Linear Export");
+    set("name", "TO_PWL_" + is);
+    set("x position", 600 + 300*i);
+    set("y position", Dim_x * 500);
+    set("filename", "output_folder/output" + is + ".txt");
+    
+} 
+
+
+
+for(i=1:Dim_x){
+    is = num2str(i);    
+    
+    
+    addelement("CW Laser");
+    set("name", "Laser_" + is);
+    set("x position", 0);
+    set("y position", 300*(i-1));
+    set("power", laser_power);
+    set("frequency", (193.1 + i*0.1)*10^12);
+    set("linewidth", laser_linewidth);
+    set("annotate", false);
+    
+    
+    addelement("Straight Waveguide");
+    set("name", "IN_WGD_" + is);
+    set("x position", 200);
+    set("y position", 300*(i-1));
+    set("length", wgd_length*5);
+    set("loss 1", wgd_loss);
+    set("effective index 1", wgd_eff_ind);
+    set("group index 1", wgd_group_ind);
+    set("annotate", false);
+    
+    
+    addelement("Optical Amplitude Modulator");
+    set("name", "AM_" + is);
+    set("x position", 400);
+    set("y position", 300*(i-1));    
+    set("annotate", false);
+    
+    
+    addelement("Optical Oscilloscope");
+    set("name", "OOSC_" + is);
+    set("x position", 500);
+    set("y position", 300*(i-1) - 100);
+    
+    
+    connect("Laser_" + is, "output", "IN_WGD_" + is, "port 1");
+    connect("IN_WGD_" + is, "port 2", "AM_" + is, "input");
+    connect("FROM_PWL_" + is, "output", "AM_" + is, "modulation");
+    connect("OOSC_" + is, "input", "AM_" + is, "output");
+}
+
+    
+for(i=1:Dim_y){                         # implement output vector with PIN photodiodes
+    is = num2str(i);    
+    
+        
+    addelement("Straight Waveguide");
+    set("name", "OUT_WGD_" + is);
+    set("x position", 600 + i*300);
+    set("y position", 300*Dim_x + 200);
+    set("length", wgd_length*5);
+    set("loss 1", wgd_loss);
+    set("effective index 1", wgd_eff_ind);
+    set("group index 1", wgd_group_ind);
+    set("annotate", false);
+    rotateelement("OUT_WGD_" + is);  
+        
+        
+    addelement("PIN Photodetector");
+    set("name", "PIN_" + is);
+    set("x position", 600 + i*300);
+    set("y position", 300*Dim_x + 400);
+    set("responsivity", pin_response);
+    set("dark current", pin_dark_curr);
+    rotateelement("PIN_" + is);            
+                
+    
+    addelement("LP RC Filter");
+    set("name", "FLTR_" + is);
+    set("x position", 600 + i*300);
+    set("y position", 300*Dim_x + 600);
+    set("annotate", false);
+    setexpression("FLTR_" + is, "cutoff frequency", filter_cutoff + "*%bitrate%");
+    set("insertion loss", filter_ins_loss);
+    rotateelement("FLTR_" + is);  
+    
+        
+    addelement("Oscilloscope");
+    set("name", "OSC_" + is);
+    set("x position", 525 + i*300);
+    set("y position", 300*Dim_x + 1200);    
+    rotateelement("OSC_" + is);
+    connect("OSC_" + is, "input", "FLTR_" + is, "output");  
+    
+    
+    addelement("Optical Oscilloscope");
+    set("name", "OOSCR_" + is);
+    set("x position", 675 + i*300);
+    set("y position", 300*Dim_x + 1200);
+    rotateelement("OOSCR_" + is);
+    
+    
+    connect("OUT_WGD_" + is, "port 2", "PIN_" + is, "input");
+    connect("PIN_" + is, "output", "FLTR_" + is, "input");
+    connect("FLTR_" + is, "output",  "TO_PWL_" + is, "input"); 
+}   
+
+    
+for(i=1:Dim_x){                              # Matrix realization 
+    is = num2str(i);    
+    
+    
+    for(j=1:Dim_y){
+        js = num2str(j);        
+        
+                
+        addelement("Single Matrix Element");
+        set("name", "Element_" + is + js);
+        set("coupling 1", 1/(Dim_y - j + 1));
+        set("coupling 2", 1/i);
+        set("wgd length", wgd_length); 
+        set("effective index", wgd_eff_ind);
+        set("group index", wgd_group_ind); 
+        set("wgd loss", wgd_loss);
+        set("coupler loss", coupler_ins_loss);     
+        set("x position", 600 + j*300);    
+        set("y position", 300*(i-1));
+        
+        
+        if(i!=1 & j!=1){
+            addelement("Waveguide Crossing");
+            set("name", "Crossing_" + is + js);
+            set("transmission 1", wgd_cross_trans);
+            set("reflection 1", wgd_cross_refl);
+            set("cross talk 1", wgd_cross_crosstalk); 
+            set("x position", 450 + j*300); 
+            set("y position", -150 + 300*(i-1));
+            connect("Crossing_" + is + js, "port 1", "Element_" + is + num2str(j-1), "drop out");
+            connect("Crossing_" + is + js, "port 4", "Element_" + is + js, "main in");
+            connect("Crossing_" + is + js, "port 3", "Element_" + num2str(i-1) + num2str(j-1), "main out");
+            connect("Crossing_" + is + js, "port 2", "Element_" + is + num2str(j-1), "add in");
+        }
+        
+        
+        addelement("DC Source");
+        set("name", "Source_" + is + js);
+        set("amplitude", Input_Matrix(i, j));
+        set("x position", 600 + j*300);
+        set("y position", -700*(Dim_y + 3) + 200*i);       
+    
+        
+        connect("Element_" + is + js, "modulation", "Source_" + is + js, "output");
+        if(j==1){connect("Element_" + is + js, "main in", "AM_" + is, "output");}
+        if(i==1 & j>=2){connect("Element_" + is + js, "main in", "Element_" + is + num2str(j-1), "drop out");}
+        if(j==Dim_y & i>=2){connect("Element_" + is + js, "add in", "Element_" + num2str(i-1) + js, "main out");}
+        if(i==Dim_x){connect("Element_" + is + js, "main out", "OUT_WGD_" + js, "port 1");}
+        if(i==Dim_x){connect("Element_" + is + js, "main out", "OOSCR_" + js, "input");}  
+    }   
+}   
